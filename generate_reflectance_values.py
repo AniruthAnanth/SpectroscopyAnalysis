@@ -171,3 +171,7 @@ plt.plot(wavelengths[:-1], R_s, label="Reflection")
 plt.xlabel("Wavelength in nm")
 plt.legend()
 plt.show()
+
+import json
+with open('data.json', 'w', encoding='utf-8') as f:
+    json.dump([wavelengths[:-1].tolist(), R_s], f, ensure_ascii=False, indent=4)
