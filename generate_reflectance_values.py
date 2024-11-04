@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import time
-import tmm
+import LightweightTransferMatrixMethod
 import os
 import yaml
 import scipy
