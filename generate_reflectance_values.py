@@ -11,12 +11,13 @@ import pandas as pd
 from ri import RefractiveIndexMaterial
 import random
 import json
+import copy
 
 # Define constants for the number of wavelengths, precision, and sample thickness.
-NUM_WAVELENGTHS = 1000
+NUM_WAVELENGTHS = 100#0
 DEFINITION = 100000
 DROPLET_DEPTH = 2000000
-NUM_SAMPLES = 1000  # Set the number of samples
+NUM_SAMPLES = 16  # Set the number of samples
 
 # Seed the random number generator for reproducibility.
 random.seed(42)
@@ -145,26 +146,35 @@ vocs = comm.bcast(vocs, root=0)
 
 # Function to generate a batch of samples with VOC refractive indices.
 def generate_sample(vocs, definition):
-    sample = []
+    sample_layers = []
     total_sample_thickness = DROPLET_DEPTH
     individual_voc_thickness = total_sample_thickness / definition
-    total_voc_sum = max(sum([voc[2] for voc in vocs]), 1)
+    adjusted_vocs = copy.deepcopy(vocs)
+
+    for i in range(len(adjusted_vocs)):
+        adjusted_vocs[i][2] += random.random() * 1e-4
+
+    total_voc_sum = max(sum([voc[2] for voc in adjusted_vocs]), 1)
     
-    for voc in vocs:
+    for voc in adjusted_vocs:
         num_voc = round((voc[2] / total_voc_sum) * definition)
-        sample.extend([[generate_refractive_index_from_csv(voc[3]), individual_voc_thickness, voc[0]]] * num_voc)
+        sample_layers.extend([[generate_refractive_index_from_csv(voc[3]), individual_voc_thickness, voc[0]]] * num_voc)
     
-    random.shuffle(sample)
-    sample.insert(0, [(1.0), None])
-    sample.append([(1.0), None])
+    random.shuffle(sample_layers)
+    sample_layers.insert(0, [(1.0), None])
+    sample_layers.append([(1.0), None])
+
+    sample = [adjusted_vocs, sample_layers, None] # concentration, layers, reflection values
+
     return sample
 
 start_gen = time.time()
 if rank == 0:
     print("Generating samples...")
-# Generate 1000 samples and store them in a list.
-all_samples = [generate_sample(vocs, DEFINITION) for _ in range(round(NUM_SAMPLES / size))]
-print(f"Generated {len(all_samples)} samples in {(time.time() - start_gen):.3f}s (rank {rank})...")
+# Generate samples and store them in a list.
+all_samples = [generate_sample(vocs, DEFINITION) for _ in range(round(NUM_SAMPLES))]
+if rank == 0:
+    print(f"Generated {len(all_samples)} samples in {(time.time() - start_gen):.3f}s (rank {rank})...")
 
 # Divide wavelengths among processes and initialize lists for reflection and transmission.
 local_wavelengths = np.array_split(wavelengths[:-1], size)[rank]
@@ -175,16 +185,17 @@ print(f"Starting tmm processing (rank {rank})...")
 # Loop over each sample and wavelength, compute reflection and transmission using TMM.
 for i in range(len(all_samples)):
     local_R_sample, local_T_sample = [], []
-    sample = all_samples[i]
+    sample_layers = all_samples[i][1]
 
     for w in local_wavelengths:
         start = time.time()
-        res = LightweightTransferMatrixMethod.solve_tmm(sample, w, 0)
+        res = LightweightTransferMatrixMethod.solve_tmm(sample_layers, w, 0)
         print(f"Calculated RT with sample #{i} for {w:0.3f} nm in {(time.time() - start):0.3f}s (rank {rank})...")
         local_R_sample.append(res[0])
         local_T_sample.append(res[1])
     local_R_s.append(local_R_sample)
     local_T_s.append(local_T_sample)
+    all_samples[i][2] = local_R_s
 
 # Gather results at root process.
 R_s = comm.gather(local_R_s, root=0)
@@ -195,9 +206,20 @@ if rank == 0:
     #R_s = [item for sublist in R_s for item in sublist]
     #T_s = [item for sublist in T_s for item in sublist]
     
+    print("Processing results...")
+    res = {}
+
+    for i in range(len(all_samples)):
+        res[i] = {
+            "wl": wavelengths.tolist(),
+            "l": [(i[2], i[1]) for i in all_samples[i][1][1:-1]],
+            "r": all_samples[i][2],
+        }
+
+
     # Save results to JSON file.
     with open('data.json', 'w', encoding='utf-8') as f:
-        json.dump({"wavelengths": wavelengths[:-1].tolist(), "reflection": R_s, "transmission": T_s}, f, ensure_ascii=False, indent=4)
+        json.dump(res, f, ensure_ascii=False, indent=4)
     print("Stored reflectance and transmission values!")
     
     # Calculate and print total elapsed time.
