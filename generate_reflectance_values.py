@@ -14,10 +14,10 @@ import json
 import copy
 
 # Define constants for the number of wavelengths, precision, and sample thickness.
-NUM_WAVELENGTHS = 100#0
+NUM_WAVELENGTHS = 10
 DEFINITION = 100000
 DROPLET_DEPTH = 2000000
-NUM_SAMPLES = 16  # Set the number of samples
+NUM_SAMPLES = 2  # Set the number of samples
 
 # Seed the random number generator for reproducibility.
 random.seed(42)
@@ -95,7 +95,7 @@ def find_voc_in_db(voc_name):
 
     return voc_shelf, voc_filename, voc_page_names
 
-# Function to generate refractive index data from a CSV file.
+# Function to generate refractive index from a CSV file.
 def generate_refractive_index_from_csv(csv):
     df = pd.read_csv(csv)
     lbdas = df['wavelength'][1:].to_numpy().astype(np.float64)[0:]
@@ -161,65 +161,63 @@ def generate_sample(vocs, definition):
         sample_layers.extend([[generate_refractive_index_from_csv(voc[3]), individual_voc_thickness, voc[0]]] * num_voc)
     
     random.shuffle(sample_layers)
-    sample_layers.insert(0, [(1.0), None])
-    sample_layers.append([(1.0), None])
+    sample_layers.insert(0, [(1.0), None, None])
+    sample_layers.append([(1.0), None, None])
 
-    sample = [adjusted_vocs, sample_layers, None] # concentration, layers, reflection values
+    sample = [adjusted_vocs, sample_layers, []] # concentration, layers, reflection values
 
     return sample
 
+# Generate samples and divide among processes.
 start_gen = time.time()
 if rank == 0:
     print("Generating samples...")
-# Generate samples and store them in a list.
-all_samples = [generate_sample(vocs, DEFINITION) for _ in range(round(NUM_SAMPLES))]
-if rank == 0:
-    print(f"Generated {len(all_samples)} samples in {(time.time() - start_gen):.3f}s (rank {rank})...")
 
-# Divide wavelengths among processes and initialize lists for reflection and transmission.
-local_wavelengths = np.array_split(wavelengths[:-1], size)[rank]
+all_samples = [generate_sample(vocs, DEFINITION) for _ in range(round(NUM_SAMPLES))]
+all_samples_array = np.array(all_samples, dtype=object)
+local_samples = np.array_split(all_samples_array, size, axis=0)[rank].tolist()
+
+if rank == 0:
+    print(f"Generated {len(all_samples)} samples in {(time.time() - start_gen):.3f}s...")
+
+# Initialize lists for reflection and transmission.
 local_R_s, local_T_s = [], []
 
-print(f"Starting tmm processing (rank {rank})...")
-
-# Loop over each sample and wavelength, compute reflection and transmission using TMM.
-for i in range(len(all_samples)):
+# Process samples and wavelengths.
+print(f"Starting TMM processing (rank {rank})...")
+for i in range(len(local_samples)):
     local_R_sample, local_T_sample = [], []
-    sample_layers = all_samples[i][1]
+    sample = local_samples[i]
+    sample_layers = sample[1]
 
-    for w in local_wavelengths:
+    for w in wavelengths[:-1]:
         start = time.time()
         res = LightweightTransferMatrixMethod.solve_tmm(sample_layers, w, 0)
-        print(f"Calculated RT with sample #{i} for {w:0.3f} nm in {(time.time() - start):0.3f}s (rank {rank})...")
+        print(f"Calculated RT for sample {i} with wavelength {w:.3f} nm in {time.time() - start:.3f}s (rank {rank})...")
         local_R_sample.append(res[0])
         local_T_sample.append(res[1])
+
     local_R_s.append(local_R_sample)
     local_T_s.append(local_T_sample)
-    all_samples[i][2] = local_R_s
+    sample[2] = local_R_sample
 
-# Gather results at root process.
+    local_samples[i] = {
+        "wl": wavelengths.tolist(),
+        "l": sample[0],
+        "r": sample[2],
+    }
+
+
+# Gather results at the root process.
 R_s = comm.gather(local_R_s, root=0)
 T_s = comm.gather(local_T_s, root=0)
+all_samples = comm.gather(local_samples, root=0)
 
 # If root process, save and plot the results.
 if rank == 0:
-    #R_s = [item for sublist in R_s for item in sublist]
-    #T_s = [item for sublist in T_s for item in sublist]
-    
-    print("Processing results...")
-    res = {}
-
-    for i in range(len(all_samples)):
-        res[i] = {
-            "wl": wavelengths.tolist(),
-            "l": [(i[2], i[1]) for i in all_samples[i][1][1:-1]],
-            "r": all_samples[i][2],
-        }
-
-
     # Save results to JSON file.
     with open('data.json', 'w', encoding='utf-8') as f:
-        json.dump(res, f, ensure_ascii=False, indent=4)
+        json.dump(all_samples, f, ensure_ascii=False, indent=4)
     print("Stored reflectance and transmission values!")
     
     # Calculate and print total elapsed time.
