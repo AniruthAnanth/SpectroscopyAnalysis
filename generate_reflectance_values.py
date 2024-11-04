@@ -1,3 +1,4 @@
+from mpi4py import MPI
 import matplotlib.pyplot as plt
 import time
 import LightweightTransferMatrixMethod
@@ -8,12 +9,20 @@ import numpy as np
 import pandas as pd
 from ri import RefractiveIndexMaterial
 import random
+import json
 
-NUM_WAVELENGTHS = 50
+NUM_WAVELENGTHS = 100
 DEFINITION = 100000
 DROPLET_DEPTH = 2000000
 
 random.seed(42)
+
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+size = comm.Get_size()
+
+# Capture start time
+program_start = MPI.Wtime()
 
 def save(material, wavelengths, filename):
     out_str = "wavelength,n,kappa"
@@ -72,13 +81,6 @@ def find_voc_in_db(voc_name):
 
     return voc_shelf, voc_filename, voc_page_names
 
-
-out_folder = "./csv/"
-database_path = "./refractiveindex.info-database/database/"
-
-wavelengths = np.linspace(529, 585, NUM_WAVELENGTHS)
-
-
 def generate_refractive_index_from_csv(csv):
     df = pd.read_csv(csv)
     lbdas = df['wavelength'][1:].to_numpy().astype(np.float64)[0:]
@@ -93,8 +95,9 @@ def generate_refractive_index_from_csv(csv):
 
     return raw_data_points
 
-
-# name, page selection, concentration, refractive index function
+out_folder = "./csv/"
+database_path = "./refractiveindex.info-database/database/"
+wavelengths = np.linspace(529, 585, NUM_WAVELENGTHS + 1)
 vocs = [
     ["C2H4", 0, 0.00005, None],                 # Ethylene
     ["C2H4O2", 0, 0.00001, None],               # Acetic acid
@@ -110,68 +113,67 @@ vocs = [
     ["CH4O", 0, 0.00005, None],                 # Methanol
 ]
 
+# Only root loads VOC refractive indices
+if rank == 0:
+    print("Loading VOC refractive indices...")
+    for i in range(len(vocs)):
+        voc_shelf, voc_book_name, voc_page_names = find_voc_in_db(vocs[i][0])
+        voc_material = RefractiveIndexMaterial(shelf=voc_shelf, book=voc_book_name, page=voc_page_names[vocs[i][1]])
+        save(voc_material, wavelengths, voc_book_name + ".csv")
+        vocs[i][3] = out_folder + voc_book_name + ".csv"
+        print(f"Loaded {voc_book_name}...")
+    print("Loaded all VOC's!")
 
-print("Loading VOC refractive indices...")
-
-for i in range(len(vocs)):
-    voc_shelf, voc_book_name, voc_page_names = find_voc_in_db(vocs[i][0])
-    voc_material = RefractiveIndexMaterial(
-        shelf=voc_shelf, book=voc_book_name, page=voc_page_names[vocs[i][1]])
-    save(voc_material, wavelengths, voc_book_name + ".csv")
-    vocs[i][3] = generate_refractive_index_from_csv(
-        out_folder + voc_book_name + ".csv")
-    print(f"Loaded {voc_book_name}...")
-
-print("Loaded all VOC's!")
-
+# Broadcast VOC data to all processes
+vocs = comm.bcast(vocs, root=0)
 
 def generate_sample(vocs, definition):
     sample = []
-
     total_sample_thickness = DROPLET_DEPTH
     individual_voc_thickness = total_sample_thickness / definition
-    # in case they dont add up to one
     total_voc_sum = max(sum([voc[2] for voc in vocs]), 1)
-
     for voc in vocs:
         num_voc = round((voc[2] / total_voc_sum) * definition)
-        for _ in range(num_voc):
-            sample.append([voc[3], individual_voc_thickness, voc[0]])
-
-    if len(vocs) < definition:
-        for _ in range(definition - len(vocs)):
-            sample.append([(lambda x: 1.0), individual_voc_thickness])
-
+        s = generate_refractive_index_from_csv(voc[3])
+        sample.extend([[generate_refractive_index_from_csv(voc[3]), individual_voc_thickness, voc[0]]] * num_voc)
     random.shuffle(sample)
     sample.insert(0, [(1.0), None])
     sample.append([(1.0), None])
     return sample
 
-
 test_sample = generate_sample(vocs, DEFINITION)
 
-start = time.time()
-R_s = []
-T_s = []
+# Divide wavelengths among processes
+local_wavelengths = np.array_split(wavelengths[:-1], size)[rank]
+local_R_s, local_T_s = [], []
 
-for i in range(len(wavelengths[:-1])):
-    w = wavelengths[i]
+start = time.time()
+for w in local_wavelengths:
     start_in = time.time()
     res = LightweightTransferMatrixMethod.solve_tmm(test_sample, w, 0)
-    R_s.append(res[0])
-    T_s.append(res[1])
-    print(
-        f"Calculated for {w:0.4f} nm in {(time.time() - start_in):0.3f}s ({i+1}/{len(wavelengths[:-1])})")
+    local_R_s.append(res[0])
+    local_T_s.append(res[1])
+    print(f"Rank {rank} calculated for {w:0.4f} nm in {(time.time() - start_in):0.3f}s")
 
-print(f"Calculated R_s and T_s in {time.time() - start}")
+# Gather results at root process
+R_s = comm.gather(local_R_s, root=0)
+T_s = comm.gather(local_T_s, root=0)
 
+if rank == 0:
+    # Flatten lists of lists
+    R_s = [item for sublist in R_s for item in sublist]
+    T_s = [item for sublist in T_s for item in sublist]
+    
+    # Plot results
+    plt.plot(wavelengths[:-1], R_s, label="Reflection")
+    plt.xlabel("Wavelength in nm")
+    plt.legend()
+    plt.show()
+    
+    # Save results to JSON
+    with open('data.json', 'w', encoding='utf-8') as f:
+        json.dump([wavelengths[:-1].tolist(), R_s], f, ensure_ascii=False, indent=4)
 
-plt.plot(wavelengths[:-1], R_s, label="Reflection")
-# plt.plot(wavelengths, T_s)
-plt.xlabel("Wavelength in nm")
-plt.legend()
-plt.show()
-
-import json
-with open('data.json', 'w', encoding='utf-8') as f:
-    json.dump([wavelengths[:-1].tolist(), R_s], f, ensure_ascii=False, indent=4)
+    program_end = MPI.Wtime()
+    elapsed_time = program_end - program_start
+    print(f"Total elapsed time: {elapsed_time:.3f} seconds")
