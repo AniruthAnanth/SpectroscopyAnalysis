@@ -16,7 +16,7 @@ import json
 NUM_WAVELENGTHS = 1000
 DEFINITION = 100000
 DROPLET_DEPTH = 2000000
-NUM_SAMPLES = 100  # Set the number of samples
+NUM_SAMPLES = 1000  # Set the number of samples
 
 # Seed the random number generator for reproducibility.
 random.seed(42)
@@ -164,20 +164,23 @@ if rank == 0:
     print("Generating samples...")
 # Generate 1000 samples and store them in a list.
 all_samples = [generate_sample(vocs, DEFINITION) for _ in range(round(NUM_SAMPLES / size))]
-print(f"Generated {len(all_samples)} samples in {(time.time() - start_gen):.3f} seconds...")
+print(f"Generated {len(all_samples)} samples in {(time.time() - start_gen):.3f}s (rank {rank})...")
 
 # Divide wavelengths among processes and initialize lists for reflection and transmission.
 local_wavelengths = np.array_split(wavelengths[:-1], size)[rank]
 local_R_s, local_T_s = [], []
 
-print(f"Starting tmm processing... (rank {rank})")
+print(f"Starting tmm processing (rank {rank})...")
 
 # Loop over each sample and wavelength, compute reflection and transmission using TMM.
-for sample in all_samples:
+for i in range(len(all_samples)):
     local_R_sample, local_T_sample = [], []
+    sample = all_samples[i]
 
     for w in local_wavelengths:
+        start = time.time()
         res = LightweightTransferMatrixMethod.solve_tmm(sample, w, 0)
+        print(f"Calculated RT with sample #{i} for {w:0.3f} nm in {(time.time() - start):0.3f}s (rank {rank})...")
         local_R_sample.append(res[0])
         local_T_sample.append(res[1])
     local_R_s.append(local_R_sample)
