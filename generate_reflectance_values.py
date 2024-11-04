@@ -157,7 +157,7 @@ T_s = []
 for i in range(len(wavelengths[:-1])):
     w = wavelengths[i]
     start_in = time.time()
-    res = tmm.solve_tmm(test_sample, w, 0)
+    res = LightweightTransferMatrixMethod.solve_tmm(test_sample, w, 0)
     R_s.append(res[0])
     T_s.append(res[1])
     print(
