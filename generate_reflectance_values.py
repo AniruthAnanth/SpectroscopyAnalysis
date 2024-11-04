@@ -14,10 +14,10 @@ import json
 import copy
 
 # Define constants for the number of wavelengths, precision, and sample thickness.
-NUM_WAVELENGTHS = 10
+NUM_WAVELENGTHS = 1000
 DEFINITION = 100000
 DROPLET_DEPTH = 2000000
-NUM_SAMPLES = 2  # Set the number of samples
+NUM_SAMPLES = 100000 # Set the number of samples
 
 # Seed the random number generator for reproducibility.
 random.seed(42)
@@ -116,7 +116,7 @@ out_folder = "./csv/"
 database_path = "./refractiveindex.info-database/database/"
 wavelengths = np.linspace(529, 585, NUM_WAVELENGTHS + 1)
 vocs = [
-    ["C2H4", 0, 0.00005, None],                 # Ethylene
+    ["C2H4", 0, 0.00005, None],                 # Ethylene # 0.00005
     ["C2H4O2", 0, 0.00001, None],               # Acetic acid
     ["C2H6", 0, 0.00001, None],                 # Ethane
     ["C2H6O", 1, 0.00006, None],                # Ethanol
@@ -202,7 +202,7 @@ for i in range(len(local_samples)):
     sample[2] = local_R_sample
 
     local_samples[i] = {
-        "wl": wavelengths.tolist(),
+        "wl": wavelengths[:-1].tolist(),
         "l": sample[0],
         "r": sample[2],
     }
@@ -215,6 +215,7 @@ all_samples = comm.gather(local_samples, root=0)
 
 # If root process, save and plot the results.
 if rank == 0:
+    all_samples = sum(all_samples, [])
     # Save results to JSON file.
     with open('data.json', 'w', encoding='utf-8') as f:
         json.dump(all_samples, f, ensure_ascii=False, indent=4)
@@ -224,3 +225,8 @@ if rank == 0:
     program_end = MPI.Wtime()
     elapsed_time = program_end - program_start
     print(f"Total elapsed time: {elapsed_time:.3f} seconds")
+
+    plt.plot(all_samples[0]['wl'], all_samples[0]['r'], label='Reflectance')
+    plt.xlabel("Wavelength (in nm)")
+    plt.legend()
+    plt.savefig('data_1.png')
