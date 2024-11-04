@@ -16,6 +16,7 @@ import json
 NUM_WAVELENGTHS = 1000
 DEFINITION = 100000
 DROPLET_DEPTH = 2000000
+NUM_SAMPLES = 100  # Set the number of samples
 
 # Seed the random number generator for reproducibility.
 random.seed(42)
@@ -142,17 +143,15 @@ if rank == 0:
 # Broadcast the VOC data to all processes.
 vocs = comm.bcast(vocs, root=0)
 
-# Function to generate a sample with VOC refractive indices.
+# Function to generate a batch of samples with VOC refractive indices.
 def generate_sample(vocs, definition):
     sample = []
     total_sample_thickness = DROPLET_DEPTH
     individual_voc_thickness = total_sample_thickness / definition
     total_voc_sum = max(sum([voc[2] for voc in vocs]), 1)
     
-    # For each VOC, calculate how much of it should be included in the sample.
     for voc in vocs:
         num_voc = round((voc[2] / total_voc_sum) * definition)
-        s = generate_refractive_index_from_csv(voc[3])
         sample.extend([[generate_refractive_index_from_csv(voc[3]), individual_voc_thickness, voc[0]]] * num_voc)
     
     random.shuffle(sample)
@@ -160,41 +159,43 @@ def generate_sample(vocs, definition):
     sample.append([(1.0), None])
     return sample
 
-# Generate a sample for testing.
-test_sample = generate_sample(vocs, DEFINITION)
+start_gen = time.time()
+if rank == 0:
+    print("Generating samples...")
+# Generate 1000 samples and store them in a list.
+all_samples = [generate_sample(vocs, DEFINITION) for _ in range(round(NUM_SAMPLES / size))]
+print(f"Generated {len(all_samples)} samples in {(time.time() - start_gen):.3f} seconds...")
 
 # Divide wavelengths among processes and initialize lists for reflection and transmission.
 local_wavelengths = np.array_split(wavelengths[:-1], size)[rank]
 local_R_s, local_T_s = [], []
 
-# Loop over local wavelengths and compute reflection and transmission using TMM.
-start = time.time()
-for w in local_wavelengths:
-    start_in = time.time()
-    res = LightweightTransferMatrixMethod.solve_tmm(test_sample, w, 0)
-    local_R_s.append(res[0])
-    local_T_s.append(res[1])
-    print(f"Rank {rank} calculated for {w:0.4f} nm in {(time.time() - start_in):0.3f}s")
+print(f"Starting tmm processing... (rank {rank})")
+
+# Loop over each sample and wavelength, compute reflection and transmission using TMM.
+for sample in all_samples:
+    local_R_sample, local_T_sample = [], []
+
+    for w in local_wavelengths:
+        res = LightweightTransferMatrixMethod.solve_tmm(sample, w, 0)
+        local_R_sample.append(res[0])
+        local_T_sample.append(res[1])
+    local_R_s.append(local_R_sample)
+    local_T_s.append(local_T_sample)
 
 # Gather results at root process.
 R_s = comm.gather(local_R_s, root=0)
 T_s = comm.gather(local_T_s, root=0)
 
-# If root process, plot and save the results.
+# If root process, save and plot the results.
 if rank == 0:
-    # Flatten lists of lists.
-    R_s = [item for sublist in R_s for item in sublist]
-    T_s = [item for sublist in T_s for item in sublist]
-    
-    # Plot reflection values against wavelengths.
-    plt.plot(wavelengths[:-1], R_s, label="Reflection")
-    plt.xlabel("Wavelength in nm")
-    plt.legend()
-    plt.show()
+    #R_s = [item for sublist in R_s for item in sublist]
+    #T_s = [item for sublist in T_s for item in sublist]
     
     # Save results to JSON file.
     with open('data.json', 'w', encoding='utf-8') as f:
-        json.dump([wavelengths[:-1].tolist(), R_s], f, ensure_ascii=False, indent=4)
+        json.dump({"wavelengths": wavelengths[:-1].tolist(), "reflection": R_s, "transmission": T_s}, f, ensure_ascii=False, indent=4)
+    print("Stored reflectance and transmission values!")
     
     # Calculate and print total elapsed time.
     program_end = MPI.Wtime()
