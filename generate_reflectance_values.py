@@ -14,13 +14,13 @@ import json
 import copy
 
 # Define constants for the number of wavelengths, precision, and sample thickness.
-NUM_WAVELENGTHS = 1000
-DEFINITION = 100000
-DROPLET_DEPTH = 2000000
-NUM_SAMPLES = 100000 # Set the number of samples
+NUM_WAVELENGTHS = 100#1000
+DEFINITION = 100#100000
+DROPLET_DEPTH = 2000#2000000
+NUM_SAMPLES = 1000#100000 # Set the number of samples
 
 # Seed the random number generator for reproducibility.
-random.seed(42)
+#random.seed(42)
 
 # Initialize MPI communication and get the rank and size of the current process.
 comm = MPI.COMM_WORLD
@@ -116,18 +116,18 @@ out_folder = "./csv/"
 database_path = "./refractiveindex.info-database/database/"
 wavelengths = np.linspace(529, 585, NUM_WAVELENGTHS + 1)
 vocs = [
-    ["C2H4", 0, 0.00005, None],                 # Ethylene # 0.00005
-    ["C2H4O2", 0, 0.00001, None],               # Acetic acid
-    ["C2H6", 0, 0.00001, None],                 # Ethane
-    ["C2H6O", 1, 0.00006, None],                # Ethanol
-    ["C3H6O", 1, 0.00007, None],                # Acetone
-    ["C3H8O", 1, 0.00002, None],                # Propanol
-    ["C4H8O2", 1, 0.00003, None],               # Ethyl acetate
-    ["C6H6", 1, 0.00002, None],                 # Benzene
-    ["C7H8", 1, 0.00006, None],                 # Toluene
-    ["C8H10", 0, 0.00003, None],                # Xylene
-    ["CH4", 0, 0.00017, None],                  # Methane
-    ["CH4O", 0, 0.00005, None],                 # Methanol
+    ["C2H4", 0, 0.05, None],                 # Ethylene # 0.00005
+    ["C2H4O2", 0, 0.01, None],               # Acetic acid # 0.00001
+    ["C2H6", 0, 0.01, None],                 # Ethane # 0.00001
+    ["C2H6O", 1, 0.06, None],                # Ethanol # 0.00006
+    ["C3H6O", 1, 0.07, None],                # Acetone # 0.00007
+    ["C3H8O", 1, 0.02, None],                # Propanol # 0.00002
+    ["C4H8O2", 1, 0.03, None],               # Ethyl acetate # 0.00003
+    ["C6H6", 1, 0.02, None],                 # Benzene # 0.00002
+    ["C7H8", 1, 0.06, None],                 # Toluene # 0.00006
+    ["C8H10", 0, 0.03, None],                # Xylene # 0.00003
+    ["CH4", 0, 0.17, None],                  # Methane # 0.00017
+    ["CH4O", 0, 0.05, None],                 # Methanol # 0.00005
 ]
 
 # If the current process is the root, load VOC refractive indices and save to files.
@@ -152,7 +152,7 @@ def generate_sample(vocs, definition):
     adjusted_vocs = copy.deepcopy(vocs)
 
     for i in range(len(adjusted_vocs)):
-        adjusted_vocs[i][2] += random.random() * 1e-4
+        adjusted_vocs[i][2] += random.random() * 0.1
 
     total_voc_sum = max(sum([voc[2] for voc in adjusted_vocs]), 1)
     
@@ -173,12 +173,13 @@ start_gen = time.time()
 if rank == 0:
     print("Generating samples...")
 
-all_samples = [generate_sample(vocs, DEFINITION) for _ in range(round(NUM_SAMPLES))]
-all_samples_array = np.array(all_samples, dtype=object)
-local_samples = np.array_split(all_samples_array, size, axis=0)[rank].tolist()
+local_samples = []
 
-if rank == 0:
-    print(f"Generated {len(all_samples)} samples in {(time.time() - start_gen):.3f}s...")
+for i in range(round(NUM_SAMPLES // size)):
+    local_samples.append(generate_sample(vocs, DEFINITION))
+    print(f"Generated sample {i} (rank {rank})...")
+
+print(f"Generated {len(local_samples)} samples in {(time.time() - start_gen):.3f}s...")
 
 # Initialize lists for reflection and transmission.
 local_R_s, local_T_s = [], []
@@ -193,9 +194,10 @@ for i in range(len(local_samples)):
     for w in wavelengths[:-1]:
         start = time.time()
         res = LightweightTransferMatrixMethod.solve_tmm(sample_layers, w, 0)
-        print(f"Calculated RT for sample {i} with wavelength {w:.3f} nm in {time.time() - start:.3f}s (rank {rank})...")
+        print(f"Calculated RT sample {i} with wavelength {w:.3f} nm in {time.time() - start:.3f}s (rank {rank})...")
         local_R_sample.append(res[0])
         local_T_sample.append(res[1])
+    print(f"Finished {((i + 1)/len(local_samples) * 100):0.2f}% of samples (rank {rank})...")
 
     local_R_s.append(local_R_sample)
     local_T_s.append(local_T_sample)
@@ -206,6 +208,9 @@ for i in range(len(local_samples)):
         "l": sample[0],
         "r": sample[2],
     }
+
+    with open(f'data_mid_{rank}.json', 'w', encoding='utf-8') as f:
+        json.dump(local_samples[:i + 1], f, ensure_ascii=False, indent=4)
 
 
 # Gather results at the root process.
