@@ -10,5 +10,5 @@ This project calculates the reflection and transmission properties of volatile o
 ## Usage
 Run the code with:
 ```
-mpirun -np <number of processes> python3 generate_reflectance_values.py
+mpirun --use-hwthread-cpus python3 generate_reflectance_values.py
 ```
