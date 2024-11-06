@@ -4,8 +4,6 @@ import matplotlib.pyplot as plt
 import time
 import LightweightTransferMatrixMethod
 import os
-import yaml
-import scipy
 import numpy as np
 import pandas as pd
 from ri import RefractiveIndexMaterial
@@ -14,10 +12,12 @@ import json
 import copy
 
 # Define constants for the number of wavelengths, precision, and sample thickness.
-NUM_WAVELENGTHS = 100#1000
+NUM_WAVELENGTHS = 100
 DEFINITION = 100#100000
 DROPLET_DEPTH = 2000#2000000
-NUM_SAMPLES = 1000#100000 # Set the number of samples
+NUM_SAMPLES = 10000 # Set the number of samples
+SAVE_DATA = True
+VERBOSE = 2
 
 # Seed the random number generator for reproducibility.
 #random.seed(42)
@@ -132,14 +132,14 @@ vocs = [
 
 # If the current process is the root, load VOC refractive indices and save to files.
 if rank == 0:
-    print("Loading VOC refractive indices...")
+    if VERBOSE > 0: print("Loading VOC refractive indices...")
     for i in range(len(vocs)):
         voc_shelf, voc_book_name, voc_page_names = find_voc_in_db(vocs[i][0])
         voc_material = RefractiveIndexMaterial(shelf=voc_shelf, book=voc_book_name, page=voc_page_names[vocs[i][1]])
         save(voc_material, wavelengths, voc_book_name + ".csv")
         vocs[i][3] = out_folder + voc_book_name + ".csv"
-        print(f"Loaded {voc_book_name}...")
-    print("Loaded all VOC's!")
+        if VERBOSE > 1: print(f"Loaded {voc_book_name}...")
+    if VERBOSE > 0: print("Loaded all VOC's!")
 
 # Broadcast the VOC data to all processes.
 vocs = comm.bcast(vocs, root=0)
@@ -171,21 +171,21 @@ def generate_sample(vocs, definition):
 # Generate samples and divide among processes.
 start_gen = time.time()
 if rank == 0:
-    print("Generating samples...")
+    if VERBOSE > 0: print("Generating samples...")
 
 local_samples = []
 
 for i in range(round(NUM_SAMPLES // size)):
     local_samples.append(generate_sample(vocs, DEFINITION))
-    print(f"Generated sample {i} (rank {rank})...")
+    if VERBOSE > 1: print(f"Generated sample {i} (rank {rank})...")
 
-print(f"Generated {len(local_samples)} samples in {(time.time() - start_gen):.3f}s...")
+if VERBOSE > 0: print(f"Generated {len(local_samples)} samples in {(time.time() - start_gen):.3f}s...")
 
 # Initialize lists for reflection and transmission.
 local_R_s, local_T_s = [], []
 
 # Process samples and wavelengths.
-print(f"Starting TMM processing (rank {rank})...")
+if VERBOSE > 0: print(f"Starting TMM processing (rank {rank})...")
 for i in range(len(local_samples)):
     local_R_sample, local_T_sample = [], []
     sample = local_samples[i]
@@ -194,14 +194,14 @@ for i in range(len(local_samples)):
     for w in wavelengths[:-1]:
         start = time.time()
         res = LightweightTransferMatrixMethod.solve_tmm(sample_layers, w, 0)
-        print(f"Calculated RT sample {i} with wavelength {w:.3f} nm in {time.time() - start:.3f}s (rank {rank})...")
+        if VERBOSE > 1: print(f"Calculated RT sample {i} with wavelength {w:.3f} nm in {time.time() - start:.3f}s (rank {rank})...")
         local_R_sample.append(res[0])
         local_T_sample.append(res[1])
-    print(f"Finished {((i + 1)/len(local_samples) * 100):0.2f}% of samples (rank {rank})...")
+    if VERBOSE > 1: print(f"Finished {((i + 1)/len(local_samples) * 100):0.2f}% of samples (rank {rank})...")
 
     local_R_s.append(local_R_sample)
     local_T_s.append(local_T_sample)
-    sample[2] = local_R_sample
+    sample[2] = list(1 - (np.array(local_R_sample) + np.array(local_T_sample)))
 
     local_samples[i] = {
         "wl": wavelengths[:-1].tolist(),
@@ -209,8 +209,9 @@ for i in range(len(local_samples)):
         "r": sample[2],
     }
 
-    with open(f'data_mid_{rank}.json', 'w', encoding='utf-8') as f:
-        json.dump(local_samples[:i + 1], f, ensure_ascii=False, indent=4)
+    if SAVE_DATA:
+        with open(f'data_mid_{rank}.json', 'w', encoding='utf-8') as f:
+            json.dump(local_samples[:i + 1], f, ensure_ascii=False, indent=4)
 
 
 # Gather results at the root process.
@@ -222,14 +223,15 @@ all_samples = comm.gather(local_samples, root=0)
 if rank == 0:
     all_samples = sum(all_samples, [])
     # Save results to JSON file.
-    with open('data.json', 'w', encoding='utf-8') as f:
-        json.dump(all_samples, f, ensure_ascii=False, indent=4)
-    print("Stored reflectance and transmission values!")
+    if SAVE_DATA:
+        with open('data.json', 'w', encoding='utf-8') as f:
+            json.dump(all_samples, f, ensure_ascii=False, indent=4)
+        if VERBOSE > 0: print("Stored reflectance and transmission values!")
     
-    # Calculate and print total elapsed time.
+    # Calculate and output total elapsed time.
     program_end = MPI.Wtime()
     elapsed_time = program_end - program_start
-    print(f"Total elapsed time: {elapsed_time:.3f} seconds")
+    if VERBOSE > 0: print(f"Total elapsed time: {elapsed_time:.3f} seconds")
 
     plt.plot(all_samples[0]['wl'], all_samples[0]['r'], label='Reflectance')
     plt.xlabel("Wavelength (in nm)")
