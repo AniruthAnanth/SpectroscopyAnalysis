@@ -1,5 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
 
 def complex_modulo(z1, z2):
     # Calculate the absolute values of the complex numbers
