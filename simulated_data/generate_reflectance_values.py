@@ -12,10 +12,10 @@ import json
 import copy
 
 # Define constants for the number of wavelengths, precision, and sample thickness.
-NUM_WAVELENGTHS = 100
-DEFINITION = 100#100000
-DROPLET_DEPTH = 2000#2000000
-NUM_SAMPLES = 75000 # Set the number of samples
+NUM_WAVELENGTHS = 25
+DEFINITION = 100
+DROPLET_DEPTH = 200
+NUM_SAMPLES = 1200 # Set the number of samples
 SAVE_DATA = True
 VERBOSE = 2
 
@@ -116,16 +116,16 @@ out_folder = "./csv/"
 database_path = "../refractiveindex.info-database/database/"
 wavelengths = np.linspace(529, 585, NUM_WAVELENGTHS + 1)
 vocs = [
-    ["C2H4", 0, 0.05, None],                 # Ethylene # 0.00005
-    ["C2H4O2", 0, 0.01, None],               # Acetic acid # 0.00001
-    ["C2H6", 0, 0.01, None],                 # Ethane # 0.00001
+    #["C2H4", 0, 0.05, None],                 # Ethylene # 0.00005
+    #["C2H4O2", 0, 0.01, None],               # Acetic acid # 0.00001
+    #["C2H6", 0, 0.01, None],                 # Ethane # 0.00001
     ["C2H6O", 1, 0.06, None],                # Ethanol # 0.00006
-    ["C3H6O", 1, 0.07, None],                # Acetone # 0.00007
+    #["C3H6O", 1, 0.07, None],                # Acetone # 0.00007
     ["C3H8O", 1, 0.02, None],                # Propanol # 0.00002
-    ["C4H8O2", 1, 0.03, None],               # Ethyl acetate # 0.00003
+    #["C4H8O2", 1, 0.03, None],               # Ethyl acetate # 0.00003
     ["C6H6", 1, 0.02, None],                 # Benzene # 0.00002
     ["C7H8", 1, 0.06, None],                 # Toluene # 0.00006
-    ["C8H10", 0, 0.03, None],                # Xylene # 0.00003
+    #["C8H10", 0, 0.03, None],                # Xylene # 0.00003
     ["CH4", 0, 0.17, None],                  # Methane # 0.00017
     ["CH4O", 0, 0.05, None],                 # Methanol # 0.00005
 ]
@@ -145,15 +145,16 @@ if rank == 0:
 vocs = comm.bcast(vocs, root=0)
 
 # Function to generate a batch of samples with VOC refractive indices.
-def generate_sample(vocs, definition):
+def generate_sample(vocs, definition, sample_index):
     sample_layers = []
     total_sample_thickness = DROPLET_DEPTH
     individual_voc_thickness = total_sample_thickness / definition
     adjusted_vocs = copy.deepcopy(vocs)
 
     for i in range(len(adjusted_vocs)):
-        adjusted_vocs[i][2] = random.random()# * 0.1
+        adjusted_vocs[i][2] = random.random() * 0.01
 
+    adjusted_vocs[sample_index % len(vocs)][2] = 1
     total_voc_sum = max(sum([voc[2] for voc in adjusted_vocs]), 1)
     
     for voc in adjusted_vocs:
@@ -176,7 +177,7 @@ if rank == 0:
 local_samples = []
 
 for i in range(round(NUM_SAMPLES // size)):
-    local_samples.append(generate_sample(vocs, DEFINITION))
+    local_samples.append(generate_sample(vocs, DEFINITION, i))
     if VERBOSE > 1: print(f"Generated sample {i} (rank {rank})...")
 
 if VERBOSE > 0: print(f"Generated {len(local_samples)} samples in {(time.time() - start_gen):.3f}s...")
