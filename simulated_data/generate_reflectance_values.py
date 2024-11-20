@@ -15,9 +15,28 @@ import copy
 NUM_WAVELENGTHS = 25
 DEFINITION = 100
 DROPLET_DEPTH = 200
-NUM_SAMPLES = 1200 # Set the number of samples
+NUM_SAMPLES = 6000 # Set the number of samples
 SAVE_DATA = True
 VERBOSE = 2
+
+# Define output folder and database paths.
+out_folder = "./csv/"
+database_path = "../refractiveindex.info-database/database/"
+wavelengths = np.linspace(529, 585, NUM_WAVELENGTHS + 1)
+vocs = [
+    #["C2H4", 0, 0.05, None],                 # Ethylene # 0.00005
+    #["C2H4O2", 0, 0.01, None],               # Acetic acid # 0.00001
+    #["C2H6", 0, 0.01, None],                 # Ethane # 0.00001
+    ["C2H6O", 1, 0.06, None],                # Ethanol # 0.00006
+    #["C3H6O", 1, 0.07, None],                # Acetone # 0.00007
+    ["C3H8O", 1, 0.02, None],                # Propanol # 0.00002
+    #["C4H8O2", 1, 0.03, None],               # Ethyl acetate # 0.00003
+    #["C6H6", 1, 0.02, None],                 # Benzene # 0.00002
+    #["C7H8", 1, 0.06, None],                 # Toluene # 0.00006
+    #["C8H10", 0, 0.03, None],                # Xylene # 0.00003
+    ["CH4", 0, 0.17, None],                  # Methane # 0.00017
+    #["CH4O", 0, 0.05, None],                 # Methanol # 0.00005
+]
 
 # Seed the random number generator for reproducibility.
 #random.seed(42)
@@ -111,25 +130,6 @@ def generate_refractive_index_from_csv(csv):
 
     return raw_data_points
 
-# Define output folder and database paths.
-out_folder = "./csv/"
-database_path = "../refractiveindex.info-database/database/"
-wavelengths = np.linspace(529, 585, NUM_WAVELENGTHS + 1)
-vocs = [
-    #["C2H4", 0, 0.05, None],                 # Ethylene # 0.00005
-    #["C2H4O2", 0, 0.01, None],               # Acetic acid # 0.00001
-    #["C2H6", 0, 0.01, None],                 # Ethane # 0.00001
-    ["C2H6O", 1, 0.06, None],                # Ethanol # 0.00006
-    #["C3H6O", 1, 0.07, None],                # Acetone # 0.00007
-    ["C3H8O", 1, 0.02, None],                # Propanol # 0.00002
-    #["C4H8O2", 1, 0.03, None],               # Ethyl acetate # 0.00003
-    ["C6H6", 1, 0.02, None],                 # Benzene # 0.00002
-    ["C7H8", 1, 0.06, None],                 # Toluene # 0.00006
-    #["C8H10", 0, 0.03, None],                # Xylene # 0.00003
-    ["CH4", 0, 0.17, None],                  # Methane # 0.00017
-    ["CH4O", 0, 0.05, None],                 # Methanol # 0.00005
-]
-
 # If the current process is the root, load VOC refractive indices and save to files.
 if rank == 0:
     if VERBOSE > 0: print("Loading VOC refractive indices...")
@@ -202,7 +202,7 @@ for i in range(len(local_samples)):
 
     local_R_s.append(local_R_sample)
     local_T_s.append(local_T_sample)
-    sample[2] = list(1 - (np.array(local_R_sample) + np.array(local_T_sample)))
+    sample[2] = np.concatenate((np.array(local_R_sample), np.array(local_T_sample)), axis=None).tolist()#list(1 - (np.array(local_R_sample) + np.array(local_T_sample)))
 
     local_samples[i] = {
         "wl": wavelengths[:-1].tolist(),
@@ -234,7 +234,10 @@ if rank == 0:
     elapsed_time = program_end - program_start
     if VERBOSE > 0: print(f"Total elapsed time: {elapsed_time:.3f} seconds")
 
-    plt.plot(all_samples[0]['wl'], all_samples[0]['r'], label='Reflectance')
+
+    print(len(all_samples[0]['r'],))
+    plt.plot(all_samples[0]['wl'], all_samples[0]['r'][:NUM_WAVELENGTHS], label='Reflectance')
+    plt.plot(all_samples[0]['wl'], all_samples[0]['r'][NUM_WAVELENGTHS:], label='Transmittance')
     plt.xlabel("Wavelength (in nm)")
     plt.legend()
     plt.savefig('data_1.png')
