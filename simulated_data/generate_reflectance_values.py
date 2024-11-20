@@ -15,7 +15,7 @@ import copy
 NUM_WAVELENGTHS = 25
 DEFINITION = 100
 DROPLET_DEPTH = 200
-NUM_SAMPLES = 6000 # Set the number of samples
+NUM_SAMPLES = 24000 # Set the number of samples
 SAVE_DATA = True
 VERBOSE = 2
 
