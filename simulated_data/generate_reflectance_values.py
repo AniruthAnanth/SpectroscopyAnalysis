@@ -15,7 +15,7 @@ import copy
 NUM_WAVELENGTHS = 25
 DEFINITION = 100
 DROPLET_DEPTH = 200
-NUM_SAMPLES = 24000 # Set the number of samples
+NUM_SAMPLES = 150000 # Set the number of samples
 SAVE_DATA = True
 VERBOSE = 2
 
@@ -24,18 +24,18 @@ out_folder = "./csv/"
 database_path = "../refractiveindex.info-database/database/"
 wavelengths = np.linspace(529, 585, NUM_WAVELENGTHS + 1)
 vocs = [
-    #["C2H4", 0, 0.05, None],                 # Ethylene # 0.00005
-    #["C2H4O2", 0, 0.01, None],               # Acetic acid # 0.00001
-    #["C2H6", 0, 0.01, None],                 # Ethane # 0.00001
+    ["C2H4", 0, 0.05, None],                 # Ethylene # 0.00005
+    ["C2H4O2", 0, 0.01, None],               # Acetic acid # 0.00001
+    ["C2H6", 0, 0.01, None],                 # Ethane # 0.00001
     ["C2H6O", 1, 0.06, None],                # Ethanol # 0.00006
-    #["C3H6O", 1, 0.07, None],                # Acetone # 0.00007
+    ["C3H6O", 1, 0.07, None],                # Acetone # 0.00007
     ["C3H8O", 1, 0.02, None],                # Propanol # 0.00002
-    #["C4H8O2", 1, 0.03, None],               # Ethyl acetate # 0.00003
-    #["C6H6", 1, 0.02, None],                 # Benzene # 0.00002
-    #["C7H8", 1, 0.06, None],                 # Toluene # 0.00006
-    #["C8H10", 0, 0.03, None],                # Xylene # 0.00003
+    ["C4H8O2", 1, 0.03, None],               # Ethyl acetate # 0.00003
+    ["C6H6", 1, 0.02, None],                 # Benzene # 0.00002
+    ["C7H8", 1, 0.06, None],                 # Toluene # 0.00006
+    ["C8H10", 0, 0.03, None],                # Xylene # 0.00003
     ["CH4", 0, 0.17, None],                  # Methane # 0.00017
-    #["CH4O", 0, 0.05, None],                 # Methanol # 0.00005
+    ["CH4O", 0, 0.05, None],                 # Methanol # 0.00005
 ]
 
 # Seed the random number generator for reproducibility.
