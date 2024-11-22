@@ -13,9 +13,9 @@ import copy
 
 # Define constants for the number of wavelengths, precision, and sample thickness.
 NUM_WAVELENGTHS = 25
-DEFINITION = 100
+DEFINITION = 10
 DROPLET_DEPTH = 200
-NUM_SAMPLES = 150000 # Set the number of samples
+NUM_SAMPLES = 250000 # Set the number of samples
 SAVE_DATA = True
 VERBOSE = 2
 
@@ -36,6 +36,18 @@ vocs = [
     ["C8H10", 0, 0.03, None],                # Xylene # 0.00003
     ["CH4", 0, 0.17, None],                  # Methane # 0.00017
     ["CH4O", 0, 0.05, None],                 # Methanol # 0.00005
+    ["SiO2", 0, 0.05, None],                 # Silicon Dioxide
+    ["Al2O3", 0, 0.05, None],                # Aluminum Oxide
+    ["TiO2", 0, 0.05, None],                 # Titanium Dioxide
+    ["ZnO", 0, 0.05, None],                  # Zinc Oxide
+    ["Fe2O3", 0, 0.05, None],                # Iron(III) Oxide
+    ["CaCO3", 0, 0.05, None],                # Calcium Carbonate
+    ["MgO", 0, 0.05, None],                  # Magnesium Oxide
+    ["NaCl", 0, 0.05, None],                 # Sodium Chloride
+    ["KCl", 0, 0.05, None],                  # Potassium Chloride
+    #["BaSO4", 0, 0.05, None],                # Barium Sulfate
+    #["PbS", 0, 0.05, None],                  # Lead Sulfide
+    ["CdS", 0, 0.05, None],                  # Cadmium Sulfide
 ]
 
 # Seed the random number generator for reproducibility.

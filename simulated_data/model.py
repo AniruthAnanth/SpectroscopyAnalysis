@@ -8,18 +8,33 @@ from tensorflow.keras.layers import Dense, Flatten
 from tensorflow.keras.optimizers import Adam
 
 # Data loading and preprocessing
-with open('data.json', 'r') as f:
+with open('sowed_data.json', 'r') as f:
     raw_data = json.load(f)
+
+CLASSES = 6
 
 def convert_data_point(data_point):
     wl = np.array(data_point["wl"])
     r = np.array(data_point["r"])
     c = np.array([item[2] for item in data_point["l"]])
+
+    #print(c)
+
+    if c.tolist().index(1) <= CLASSES:
+        #print('out')
+        c = c[:CLASSES]
+    else:
+        return np.array(False), False, False
+
+    #print(c)
+
     return wl, r, c
 
 X, y, wl = [], [], None
 for data_point in raw_data:
     wl_, r, c = convert_data_point(data_point)
+    if wl_.any() == False:
+        continue
     X.append(r)
     new_c = [1 if i > 0.5 else 0 for i in c]
     y.append(new_c)
@@ -30,20 +45,27 @@ y = np.array(y)
 X = preprocessing.normalize(X)
 y = preprocessing.normalize(y)
 
+print(X.shape)
+
 # 42 86
+
 # 65 925
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=65)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=60)
 
 train_dataset = tf.data.Dataset.from_tensor_slices((X_train, y_train))
 test_dataset = tf.data.Dataset.from_tensor_slices((X_test, y_test))
 
+#flatten, 64, 128, 64 relu, softmax
+
 def create_model(input_shape, num_classes):
     model = Sequential([
         Flatten(input_shape=input_shape),
-        Dense(64),
-        Dense(128),
-        Dense(64, activation='relu'),
+        Dense(64,),
+        #Dense(256,),
+        #Dense(512),
+        Dense(128,),
+        Dense(64,),
         Dense(num_classes, activation='softmax')
     ])
     return model
@@ -61,7 +83,7 @@ print("Starting training")
 num_epochs = 60
 best_val_loss = float('inf')
 
-history = model.fit(X_train, y_train, epochs=num_epochs, batch_size=32, 
+history = model.fit(X_train, y_train, epochs=num_epochs, batch_size=64, 
                     validation_data=(X_test, y_test), verbose=1)
 
 for epoch in range(num_epochs):
