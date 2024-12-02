@@ -11,61 +11,56 @@ from tensorflow.keras.optimizers import Adam
 with open('sowed_data.json', 'r') as f:
     raw_data = json.load(f)
 
-CLASSES = 6
-
 def convert_data_point(data_point):
     wl = np.array(data_point["wl"])
     r = np.array(data_point["r"])
     c = np.array([item[2] for item in data_point["l"]])
 
-    #print(c)
+    new_c = []
 
-    if c.tolist().index(1) <= CLASSES:
-        #print('out')
-        c = c[:CLASSES]
+    for i in c:
+        if i > 0.7:
+            new_c.append(1)
+        else:
+            new_c.append(0)
+
+    """
+    if new_c[0] == 1:
+        new_c = [1, 0]
     else:
-        return np.array(False), False, False
+        new_c = [0, 1]
+    """
 
-    #print(c)
-
-    return wl, r, c
+    return wl, r, new_c  # Corrected to return new_c
 
 X, y, wl = [], [], None
+
 for data_point in raw_data:
     wl_, r, c = convert_data_point(data_point)
     if wl_.any() == False:
         continue
     X.append(r)
-    new_c = [1 if i > 0.5 else 0 for i in c]
-    y.append(new_c)
+    y.append(c)
     wl = wl_
 
 X = np.array(X)
 y = np.array(y)
 X = preprocessing.normalize(X)
-y = preprocessing.normalize(y)
 
 print(X.shape)
 
-# 42 86
-
-# 65 925
-
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=60)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
 train_dataset = tf.data.Dataset.from_tensor_slices((X_train, y_train))
 test_dataset = tf.data.Dataset.from_tensor_slices((X_test, y_test))
 
-#flatten, 64, 128, 64 relu, softmax
-
 def create_model(input_shape, num_classes):
     model = Sequential([
         Flatten(input_shape=input_shape),
-        Dense(64,),
-        #Dense(256,),
-        #Dense(512),
-        Dense(128,),
-        Dense(64,),
+        Dense(64, activation='relu'),  # Added activation
+        Dense(128, activation='relu'),  # Added activation
+        Dense(128, activation='relu'),  # Added activation
+        Dense(64, activation='relu'),  # Added activation
         Dense(num_classes, activation='softmax')
     ])
     return model
@@ -73,6 +68,7 @@ def create_model(input_shape, num_classes):
 # Initialize the custom model
 input_shape = (X.shape[1],)
 num_classes = y.shape[1]
+print(y[0])
 model = create_model(input_shape, num_classes)
 model.compile(optimizer=Adam(learning_rate=0.001), 
               loss='categorical_crossentropy', 

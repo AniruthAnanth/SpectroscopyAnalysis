@@ -17,6 +17,7 @@ for filename in os.listdir(data_dir):
             all_data.extend(data)
 
 # Write the concatenated data to sowed_data.json
+print(len(all_data))
 output_file = os.path.join(data_dir, 'sowed_data.json')
 with open(output_file, 'w') as file:
     json.dump(all_data, file, indent=4)
