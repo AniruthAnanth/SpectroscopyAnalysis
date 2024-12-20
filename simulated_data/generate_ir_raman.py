@@ -8,7 +8,8 @@ import json
 import random
 import time
 
-random.seed(42)
+NUM_COMPONENTS = 8
+
 
 def Gauss(x, mu, sigma, A=1):    
     return A / (sigma * np.sqrt(2 * np.pi)) \
@@ -23,61 +24,74 @@ def create_component(x_range, peaks):
 def cm1_to_nm(cm_1):
     return 1e7 / cm_1
 
-ir_range = np.linspace(780, 1400, 1024) # IR-A Range
 
-# Generate 20 components with random peaks
+random.seed(68)
+
+x_range = np.linspace(780, 1400, 1000)
+
+# Generate NUM_COMPONENTS components with random peaks
 components = []
-for i in range(20):
-    num_peaks = random.randint(1, 5)
-    peaks = [(random.uniform(780, 1400), random.uniform(0.5, 5), random.uniform(0.05, 1)) for _ in range(num_peaks)]
-    component = create_component(ir_range, peaks)
+for i in range(NUM_COMPONENTS):
+    num_peaks = random.randint(1, 3)
+    peaks = [(random.uniform(780, 1200), random.uniform(1, 10), random.uniform(0.25, 0.75)) for _ in range(num_peaks)]
+    component = create_component(x_range, peaks)
     components.append(component)
 
-def generate_ir_sample(component_data):
-    mixture = component_data[0][0] * component_data[0][1]
-    for i in range(1, len(component_data)):
-        mixture += component_data[i][0] * component_data[i][1]
-
-    mixture += np.random.normal(0, 0.01, len(ir_range))
-
-    return mixture
-
-def generate_from_concentrations(components, concentrations):
-    all_component_data = []
-
-    for i in range(0, len(concentrations)):
-        start = time.time()
-        concentration_set = concentrations[i]
-        concentration = np.array(concentrations)
-        concentration = (1 / np.sum(concentration) * concentration).tolist()
-        component_data = []
-        for component, concentration in zip(components, concentration_set):
-            component_data.append((component, concentration))
-        all_component_data.append(component_data)
-        print(f"Generated concentrations {i + 1} in {time.time()-start:.4f} seconds ({(i + 1)/len(concentrations)*100:.2f}%)")
-    
-    return all_component_data
-
-NUM_SAMPLES = 20000
-
-concentrations = [
-    [random.uniform(0.01, 0.5) for j in range(20)] for i in range(NUM_SAMPLES)
+components = [
+    [   # CH4
+        # https://www.researchgate.net/figure/Raman-spectra-of-CH4-The-Raman-spectrum-in-red-shows-one-prominent-signal-for-the-CH4_fig3_362645904
+        cm1_to_nm(2917),
+    ],
+    #[   # CO2
+    #    # https://www.researchgate.net/publication/244732172_Micro-Raman_Thermometer_for_CO2_Fluids_Temperature_and_Density_Dependence_on_Raman_Spectra_of_CO2_Fluids
+    #    cm1_to_nm(1388),
+    #    cm1_to_nm(1285),
+    #],
+    [   # N2 Gas
+        # https://www.researchgate.net/publication/364451331_Precision_evaluation_of_nitrogen_isotope_ratios_by_Raman_spectrometry
+        cm1_to_nm(2300),
+    ],
 ]
 
-all_component_data = generate_from_concentrations(components, concentrations)
 
-mix_spectrums = []
+x_range = np.linspace(780, np.array(components).flatten().max() + 300, 10000) # IR-A Range to Far-IR (1m)
 
-for i in range(len(all_component_data)):
-    component = all_component_data[i]
-    start = time.time()
-    mix_spectrums.append(generate_ir_sample(component).tolist())
-    print(f"Finalized sample {i} in {time.time() - start:.7f} second ({(i + 1)/len(all_component_data)*100:.2f}%)")
+for i in range(len(components)):
+    peaks = components[i]
+
+    for j in range(len(peaks)):
+        peaks[j] = (peaks[j], random.uniform(1, 10), random.uniform(0.25, 0.75))
+    print(peaks)
+    components[i] = create_component(x_range, peaks)
+
+
+NUM_COMPONENTS = len(components)
+NUM_SAMPLES = 5000
+concentrations = []
+spectrums = []
+
+for i in range(NUM_SAMPLES):
+    sample_concentration = []
+
+    for j in range(NUM_COMPONENTS):
+        sample_concentration.append(random.uniform(0.1, 0.5))
+
+    sample_concentration = np.array(sample_concentration)
+    sample_concentration = (1 / sample_concentration.sum()) * sample_concentration
+    concentrations.append(sample_concentration.tolist())    
+
+    spectrum = np.zeros_like(x_range)
+
+    spectrum += sample_concentration[j] * components[j]
+
+    spectrums.append(spectrum.tolist())
+    print(f"Generated spectrum {i+1}/{NUM_SAMPLES}")
 
 print("Outputting data to data.json...")
-json.dump({
-    'range': ir_range.tolist(),
-    'spectrums': mix_spectrums,
-    'concentrations': concentrations
-}, open('data.json', 'w'), indent=4)
+with open('data.json', 'w') as f:
+    json.dump({
+        'range': x_range.tolist(),
+        'spectrums': spectrums,
+        'concentrations': concentrations
+    }, f, indent=4)
 print("Done!")

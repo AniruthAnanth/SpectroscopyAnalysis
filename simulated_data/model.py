@@ -42,18 +42,20 @@ def pre_process_sample(spectrum):
 
 data = json.loads(open('data.json', 'r').read())
 
-x = np.array(data['spectrums'])
-Y = np.array(data['concentrations'])
+X = np.array(data['spectrums'])
+y = np.array(data['concentrations'])
+
+print("X shape:", X.shape)
 
 # Split the data into training and testing sets
-X_train, X_test, y_train, y_test = train_test_split(x, Y, test_size=0.2, random_state=32)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=32)
 
 # Initialize the TensorFlow model
 model = Sequential([
     Dense(16, activation='relu', input_shape=(X_train.shape[1],)),
     Dense(32, activation='relu'),
     Dense(32, activation='relu'),
-    Dense(20)  # Output layer for 20 components
+    Dense(y_train.shape[1])  # Output layer for 20 components
 ])
 
 # Compile the model
