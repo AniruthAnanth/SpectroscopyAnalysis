@@ -1,96 +1,93 @@
-import json
 import numpy as np
-from sklearn import preprocessing
+import json
+import matplotlib.pyplot as plt
+from scipy.signal import savgol_filter, general_gaussian
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Flatten
+from tensorflow.keras.layers import Dense
 from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.callbacks import EarlyStopping
+import random
 
-# Data loading and preprocessing
-with open('sowed_data.json', 'r') as f:
-    raw_data = json.load(f)
+random.seed(42)
 
-def convert_data_point(data_point):
-    wl = np.array(data_point["wl"])
-    r = np.array(data_point["r"])
-    c = np.array([item[2] for item in data_point["l"]])
+def pre_process_sample(spectrum):
+    def modified_z_score(ys):
+        ysb = np.diff(ys) # Differentiated intensity values
+        median_y = np.median(ysb) # Median of the intensity values
+        median_absolute_deviation_y = np.median([np.abs(y - median_y) for y in ysb]) # median_absolute_deviation of the differentiated intensity values
+        modified_z_scores = [0.6745 * (y - median_y) / median_absolute_deviation_y for y in ysb] # median_absolute_deviationmodified z scores
+        return modified_z_scores
+        
+    # The next function calculates the average values around the point to be replaced.
+    def fixer(y,ma):
+        threshold = 7 # binarization threshold
+        spikes = abs(np.array(modified_z_score(y))) > threshold
+        y_out = y.copy()
+        for i in np.arange(len(spikes)):
+            if spikes[i] != 0:
+                w = np.arange(i-ma,i+1+ma)
+                we = w[spikes[w] == 0]
+                y_out[i] = np.mean(y[we])
+        return y_out
 
-    new_c = []
+    despiked_spectrum = fixer(spectrum, ma=10)
+    w, p = 9, 2
 
-    for i in c:
-        if i > 0.7:
-            new_c.append(1)
-        else:
-            new_c.append(0)
+    smoothed_spectrum = savgol_filter(despiked_spectrum, w, polyorder = p, deriv=0)
 
-    """
-    if new_c[0] == 1:
-        new_c = [1, 0]
-    else:
-        new_c = [0, 1]
-    """
+    return smoothed_spectrum
 
-    return wl, r, new_c  # Corrected to return new_c
+data = json.loads(open('data.json', 'r').read())
 
-X, y, wl = [], [], None
+x = np.array(data['spectrums'])
+Y = np.array(data['concentrations'])
 
-for data_point in raw_data:
-    wl_, r, c = convert_data_point(data_point)
-    if wl_.any() == False:
-        continue
-    X.append(r)
-    y.append(c)
-    wl = wl_
+# Split the data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(x, Y, test_size=0.2, random_state=32)
 
-X = np.array(X)
-y = np.array(y)
-X = preprocessing.normalize(X)
+# Initialize the TensorFlow model
+model = Sequential([
+    Dense(16, activation='relu', input_shape=(X_train.shape[1],)),
+    Dense(32, activation='relu'),
+    Dense(32, activation='relu'),
+    Dense(20)  # Output layer for 20 components
+])
 
-print(X.shape)
+# Compile the model
+model.compile(optimizer=Adam(learning_rate=0.001), loss='mean_squared_error')
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+# Define the early stopping callback
+early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
 
-train_dataset = tf.data.Dataset.from_tensor_slices((X_train, y_train))
-test_dataset = tf.data.Dataset.from_tensor_slices((X_test, y_test))
+# Train the model and save the training history
+history = model.fit(X_train, y_train, epochs=50, batch_size=32, validation_split=0.2, callbacks=[early_stopping])
 
-def create_model(input_shape, num_classes):
-    model = Sequential([
-        Flatten(input_shape=input_shape),
-        Dense(64, activation='relu'),  # Added activation
-        Dense(128, activation='relu'),  # Added activation
-        Dense(128, activation='relu'),  # Added activation
-        Dense(64, activation='relu'),  # Added activation
-        Dense(num_classes, activation='softmax')
-    ])
-    return model
+# Predict on the test set
+y_pred = model.predict(X_test)
 
-# Initialize the custom model
-input_shape = (X.shape[1],)
-num_classes = y.shape[1]
-print(y[0])
-model = create_model(input_shape, num_classes)
-model.compile(optimizer=Adam(learning_rate=0.001), 
-              loss='categorical_crossentropy', 
-              metrics=['accuracy'])
+print(y_test, y_pred)
 
-# Training loop
-print("Starting training")
-num_epochs = 60
-best_val_loss = float('inf')
+# Calculate the mean squared error
+mse = mean_squared_error(y_test, y_pred)
+print(f"Mean Squared Error: {mse}")
 
-history = model.fit(X_train, y_train, epochs=num_epochs, batch_size=64, 
-                    validation_data=(X_test, y_test), verbose=1)
+# Plot the results
+plt.figure()
+plt.plot(y_test, y_pred, 'o')
+plt.xlabel('True Values')
+plt.ylabel('Predictions')
+plt.title('True vs Predicted Values')
+plt.show()
 
-for epoch in range(num_epochs):
-    val_loss = history.history['val_loss'][epoch]
-    if val_loss < best_val_loss:
-        best_val_loss = val_loss
-        model.save('best_model.keras')
-
-model.save('last_model.keras')
-
-model = tf.keras.models.load_model('best_model.keras')
-train_accuracy = model.evaluate(X_train, y_train, verbose=0)[1]
-test_accuracy = model.evaluate(X_test, y_test, verbose=0)[1]
-print(f"Best Model, Training Accuracy: {train_accuracy}, Testing Accuracy: {test_accuracy}")
+# Plot the training history
+plt.figure()
+plt.plot(history.history['loss'], label='Training Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.xlabel('Epochs')
+plt.ylabel('Loss')
+plt.title('Training and Validation Loss Over Epochs')
+plt.legend()
+plt.show()

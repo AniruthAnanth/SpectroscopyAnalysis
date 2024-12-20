@@ -1,6 +1,0 @@
-[submodule "LightweightTransferMatrixMethod"]
-	path = LightweightTransferMatrixMethod
-	url = https://github.com/AniruthAnanth/LightweightTransferMatrixMethod.git
-[submodule "refractiveindex.info-database"]
-	path = refractiveindex.info-database
-	url = https://github.com/polyanskiy/refractiveindex.info-database.git
