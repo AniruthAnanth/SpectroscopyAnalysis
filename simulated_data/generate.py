@@ -84,6 +84,8 @@ for i in range(NUM_SAMPLES):
 
     spectrum += sample_concentration[j] * components[j]
 
+    spectrum += np.random.normal(0, 0.05, len(x_range))
+
     spectrums.append(spectrum.tolist())
     print(f"Generated spectrum {i+1}/{NUM_SAMPLES}")
 

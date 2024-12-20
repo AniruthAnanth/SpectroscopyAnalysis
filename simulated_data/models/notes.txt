@@ -1,0 +1,42 @@
+v1:
+16 relu
+32 relu
+32 relu
+
+mse 2.273169112936933e-07
+
+v2:
+16 relu
+16 relu
+
+mse 9.541203129443912e-08
+
+# new dataset with more noises
+v2.1:
+16 relu
+16 relu
+
+overfit a lot to the training data, despite the early stopping callback
+these loss graphs make me want to sob because they're so clean and the convergence is so beautiful
+
+mse 0.005559748698870241
+mse with denoising 
+    0.0025280553219476126 after 50 epochs did not plateau
+    0.00038297869433581244 after 100 epochs
+
+v3:
+16 relu
+16 relu
+8 relu
+
+mse with denoising 0.0003213159950135783
+
+v4:
+32 relu
+16 relu
+
+wider models appear to be more stable with and without noise
+MAD is around ±1.635%
+
+mse 0.00041517712963399784
+mse with denoising 0.0004681148732013148

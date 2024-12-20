@@ -13,7 +13,10 @@ import random
 
 random.seed(42)
 
+smoothed = 0
+
 def pre_process_sample(spectrum):
+    global smoothed
     def modified_z_score(ys):
         ysb = np.diff(ys) # Differentiated intensity values
         median_y = np.median(ysb) # Median of the intensity values
@@ -38,7 +41,10 @@ def pre_process_sample(spectrum):
 
     smoothed_spectrum = savgol_filter(despiked_spectrum, w, polyorder = p, deriv=0)
 
-    return smoothed_spectrum
+    print(smoothed)
+    smoothed += 1
+
+    return np.array(smoothed_spectrum)
 
 data = json.loads(open('data.json', 'r').read())
 
@@ -47,14 +53,15 @@ y = np.array(data['concentrations'])
 
 print("X shape:", X.shape)
 
+X = np.array(list(map(pre_process_sample, X)))
+
 # Split the data into training and testing sets
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=32)
 
 # Initialize the TensorFlow model
 model = Sequential([
     Dense(16, activation='relu', input_shape=(X_train.shape[1],)),
-    Dense(32, activation='relu'),
-    Dense(32, activation='relu'),
+    Dense(16, activation='relu'),
     Dense(y_train.shape[1])  # Output layer for 20 components
 ])
 
@@ -62,15 +69,13 @@ model = Sequential([
 model.compile(optimizer=Adam(learning_rate=0.001), loss='mean_squared_error')
 
 # Define the early stopping callback
-early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
+early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
 
 # Train the model and save the training history
 history = model.fit(X_train, y_train, epochs=50, batch_size=32, validation_split=0.2, callbacks=[early_stopping])
 
 # Predict on the test set
 y_pred = model.predict(X_test)
-
-print(y_test, y_pred)
 
 # Calculate the mean squared error
 mse = mean_squared_error(y_test, y_pred)
@@ -93,3 +98,5 @@ plt.ylabel('Loss')
 plt.title('Training and Validation Loss Over Epochs')
 plt.legend()
 plt.show()
+
+model.save('models/model.keras')
