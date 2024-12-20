@@ -5,11 +5,13 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import json
+import csv
 import random
 import time
 
-NUM_COMPONENTS = 8
+start = time.time()
 
+NUM_COMPONENTS = 8
 
 def Gauss(x, mu, sigma, A=1):    
     return A / (sigma * np.sqrt(2 * np.pi)) \
@@ -37,16 +39,17 @@ for i in range(NUM_COMPONENTS):
     component = create_component(x_range, peaks)
     components.append(component)
 
+"""
 components = [
     [   # CH4
         # https://www.researchgate.net/figure/Raman-spectra-of-CH4-The-Raman-spectrum-in-red-shows-one-prominent-signal-for-the-CH4_fig3_362645904
         cm1_to_nm(2917),
     ],
-    #[   # CO2
-    #    # https://www.researchgate.net/publication/244732172_Micro-Raman_Thermometer_for_CO2_Fluids_Temperature_and_Density_Dependence_on_Raman_Spectra_of_CO2_Fluids
-    #    cm1_to_nm(1388),
-    #    cm1_to_nm(1285),
-    #],
+    [   # CO2
+        # https://www.researchgate.net/publication/244732172_Micro-Raman_Thermometer_for_CO2_Fluids_Temperature_and_Density_Dependence_on_Raman_Spectra_of_CO2_Fluids
+        cm1_to_nm(1388),
+        cm1_to_nm(1285),
+    ],
     [   # N2 Gas
         # https://www.researchgate.net/publication/364451331_Precision_evaluation_of_nitrogen_isotope_ratios_by_Raman_spectrometry
         cm1_to_nm(2300),
@@ -54,21 +57,23 @@ components = [
 ]
 
 
-x_range = np.linspace(780, np.array(components).flatten().max() + 300, 10000) # IR-A Range to Far-IR (1m)
+x_range = np.linspace(780, max(list([item for sublist in components for item in sublist ])) + 300, 8000) # IR-A Range to Far-IR (1m)
 
 for i in range(len(components)):
     peaks = components[i]
 
     for j in range(len(peaks)):
-        peaks[j] = (peaks[j], random.uniform(1, 10), random.uniform(0.25, 0.75))
+        peaks[j] = (peaks[j], random.uniform(1, 10), random.uniform(0.35, 0.75))
     print(peaks)
     components[i] = create_component(x_range, peaks)
-
+"""
 
 NUM_COMPONENTS = len(components)
-NUM_SAMPLES = 5000
+NUM_SAMPLES = 1000
 concentrations = []
 spectrums = []
+
+poly = random.uniform(0.00001, 0.0001) * (0.2 * np.ones(len(x_range)) + 0.0001 * x_range + 0.000051 * (x_range - 680)**2) 
 
 for i in range(NUM_SAMPLES):
     sample_concentration = []
@@ -84,10 +89,15 @@ for i in range(NUM_SAMPLES):
 
     spectrum += sample_concentration[j] * components[j]
 
-    spectrum += np.random.normal(0, 0.05, len(x_range))
+    spectrum += np.random.normal(0, 0.02, len(x_range))
+
+    spectrum += poly
 
     spectrums.append(spectrum.tolist())
     print(f"Generated spectrum {i+1}/{NUM_SAMPLES}")
+
+plt.plot(x_range, spectrums[13])
+plt.savefig('spectrum.png')
 
 print("Outputting data to data.json...")
 with open('data.json', 'w') as f:
@@ -96,4 +106,4 @@ with open('data.json', 'w') as f:
         'spectrums': spectrums,
         'concentrations': concentrations
     }, f, indent=4)
-print("Done!")
+print(f"Done in {time.time() - start:.2f} seconds!")

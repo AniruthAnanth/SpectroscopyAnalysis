@@ -40,3 +40,21 @@ MAD is around ±1.635%
 
 mse 0.00041517712963399784
 mse with denoising 0.0004681148732013148
+
+# new, smaller, dataset with polynomial baselining
+# removed all predenoising becaues savgol filter was too slow
+
+v5:
+32 relu
+32 relu
+16 relu
+
+preprocessing (removing polynomical baseline) on only a part of the samples is enough to give the model a push in the right direction
+model is most definitely overfitted, validation loss skyrockets, had to reduce patience a lot
+
+mse 
+mad 0.0627...
+mse with 150 sample push 0.0021654285400764953
+mad with 150 sample push 0.03706750750391805
+
+v6:
