@@ -58,3 +58,14 @@ mse with 150 sample push 0.0021654285400764953
 mad with 150 sample push 0.03706750750391805
 
 v6:
+worst model yet, seems like the dataset is backward
+
+# redid database
+
+v7:
+spectacular model!
+
+had to mess with the dataset a couple times ot make sure it wasn't just guessing an average value by randomly dropping compounds from the mixture.
+
+mse 0.0049
+mad 0.0511
